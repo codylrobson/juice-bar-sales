@@ -1,0 +1,7 @@
+/data/juice-bar-sales.json
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+  Access-Control-Allow-Origin: *
+
+/*
+  X-Frame-Options: ALLOWALL
+  Content-Security-Policy: frame-ancestors 'self' https:;
