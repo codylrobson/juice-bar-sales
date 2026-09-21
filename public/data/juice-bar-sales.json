@@ -1,0 +1,16 @@
+{
+  "generatedAt": null,
+  "timezone": "America/New_York",
+  "source": "ABC Ignite POS Transactions",
+  "status": "setup_pending",
+  "summary": {
+    "grossSales": 0,
+    "netSales": 0,
+    "tax": 0,
+    "transactions": 0,
+    "units": 0
+  },
+  "clubs": [],
+  "items": [],
+  "transactions": []
+}
