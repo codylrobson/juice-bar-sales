@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Best Fitness Juice Bar Live Feed</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+  <style>
+    :root { --orange:#f47721; --navy:#031b34; --muted:#64748b; --bg:#f7fafc; --card:#ffffff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:#0f172a; }
+    .wrap { max-width:1180px; margin:0 auto; padding:24px; }
+    header { display:flex; gap:16px; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+    h1 { margin:0; font-size:clamp(28px,4vw,44px); color:var(--navy); letter-spacing:-.04em; }
+    .subtitle { color:var(--muted); margin-top:6px; }
+    .badge { background:var(--navy); color:#fff; border-radius:999px; padding:8px 12px; font-weight:700; white-space:nowrap; }
+    .grid { display:grid; gap:16px; }
+    .kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .card { background:var(--card); border:1px solid #e2e8f0; border-radius:18px; box-shadow:0 8px 24px rgba(15,23,42,.06); padding:18px; }
+    .kpi-label { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.08em; font-weight:800; }
+    .kpi-value { font-size:30px; font-weight:900; margin-top:8px; color:var(--navy); }
+    .two { grid-template-columns: 1.15fr .85fr; margin-top:16px; }
+    .filters { display:flex; gap:12px; flex-wrap:wrap; margin:16px 0; }
+    select, input { border:1px solid #cbd5e1; border-radius:12px; padding:10px 12px; background:#fff; min-width:180px; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th, td { padding:10px 8px; border-bottom:1px solid #e2e8f0; text-align:left; }
+    th { color:#475569; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+    .status { margin-top:14px; color:var(--muted); font-size:13px; }
+    .warn { color:#b45309; background:#fff7ed; border:1px solid #fed7aa; padding:12px; border-radius:14px; margin:16px 0; display:none; }
+    @media (max-width:900px){ .kpis,.two{grid-template-columns:1fr 1fr;} header{display:block}.badge{display:inline-block;margin-top:12px} }
+    @media (max-width:640px){ .kpis,.two{grid-template-columns:1fr;} .wrap{padding:14px}.kpi-value{font-size:26px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Juice Bar Live Feed</h1>
+        <div class="subtitle">All Best Fitness juice bar and smoothie bar sales from ABC Ignite POS.</div>
+      </div>
+      <div class="badge" id="refreshBadge">Loading…</div>
+    </header>
+
+    <div class="warn" id="warning"></div>
+
+    <div class="filters">
+      <select id="clubFilter"><option value="all">All clubs</option></select>
+      <select id="centerFilter"><option value="all">All profit centers</option></select>
+      <input id="search" placeholder="Search item" />
+    </div>
+
+    <section class="grid kpis">
+      <div class="card"><div class="kpi-label">Gross sales</div><div class="kpi-value" id="grossSales">$0</div></div>
+      <div class="card"><div class="kpi-label">Net sales</div><div class="kpi-value" id="netSales">$0</div></div>
+      <div class="card"><div class="kpi-label">Tax</div><div class="kpi-value" id="tax">$0</div></div>
+      <div class="card"><div class="kpi-label">Transactions</div><div class="kpi-value" id="transactions">0</div></div>
+      <div class="card"><div class="kpi-label">Units sold</div><div class="kpi-value" id="units">0</div></div>
+    </section>
+
+    <section class="grid two">
+      <div class="card"><h2>Sales by club</h2><canvas id="clubChart"></canvas></div>
+      <div class="card"><h2>Top items</h2><canvas id="itemChart"></canvas></div>
+    </section>
+
+    <section class="card" style="margin-top:16px;">
+      <h2>Recent transactions</h2>
+      <div style="overflow:auto; max-height:460px;">
+        <table>
+          <thead><tr><th>Time</th><th>Club</th><th>Profit Center</th><th>Item</th><th>Qty</th><th>Sales</th></tr></thead>
+          <tbody id="txRows"></tbody>
+        </table>
+      </div>
+      <div class="status" id="statusLine"></div>
+    </section>
+  </div>
+<script>
+const money = n => Number(n||0).toLocaleString(undefined,{style:'currency',currency:'USD'});
+const num = n => Number(n||0).toLocaleString();
+let raw = null, charts = {};
+async function loadData(){
+  const res = await fetch('./data/juice-bar-sales.json?ts=' + Date.now(), { cache:'no-store' });
+  raw = await res.json();
+  initFilters(); render();
+}
+function lines(){ return raw.transactions || []; }
+function filtered(){
+  const club = document.getElementById('clubFilter').value;
+  const center = document.getElementById('centerFilter').value;
+  const q = document.getElementById('search').value.toLowerCase().trim();
+  return lines().filter(r => (club==='all'||r.clubNumber===club) && (center==='all'||r.profitCenter===center) && (!q || String(r.itemName||'').toLowerCase().includes(q)));
+}
+function initFilters(){
+  const clubs = [...new Set(lines().map(r=>r.clubNumber).filter(Boolean))].sort();
+  const centers = [...new Set(lines().map(r=>r.profitCenter).filter(Boolean))].sort();
+  document.getElementById('clubFilter').innerHTML = '<option value="all">All clubs</option>' + clubs.map(c=>`<option>${c}</option>`).join('');
+  document.getElementById('centerFilter').innerHTML = '<option value="all">All profit centers</option>' + centers.map(c=>`<option>${c}</option>`).join('');
+  ['clubFilter','centerFilter','search'].forEach(id => document.getElementById(id).addEventListener('input', render));
+}
+function aggregate(rows, key){
+  const out = new Map();
+  rows.forEach(r => out.set(r[key] || 'Unknown', (out.get(r[key] || 'Unknown') || 0) + Number(r.subtotal || 0)));
+  return [...out.entries()].sort((a,b)=>b[1]-a[1]);
+}
+function render(){
+  const rows = filtered();
+  const sales = rows.reduce((s,r)=>s+Number(r.subtotal||0),0);
+  const tax = rows.reduce((s,r)=>s+Number(r.tax||0),0);
+  const units = rows.reduce((s,r)=>s+Number(r.quantity||0),0);
+  const receipts = new Set(rows.map(r=>r.receiptNumber || r.transactionId)).size;
+  grossSales.textContent = money(sales + tax); netSales.textContent = money(sales); window.tax.textContent = money(tax);
+  transactions.textContent = num(receipts); window.units.textContent = num(units);
+  const stamp = raw.generatedAt ? new Date(raw.generatedAt).toLocaleString(undefined,{dateStyle:'medium', timeStyle:'short'}) : 'Setup pending';
+  refreshBadge.textContent = 'Last refresh: ' + stamp;
+  statusLine.textContent = `${num(rows.length)} item lines shown • Source: ${raw.source || 'ABC Ignite'} • Timezone: ${raw.timezone || 'America/New_York'}`;
+  if(raw.status && raw.status !== 'ok'){ warning.style.display='block'; warning.textContent = 'Status: ' + raw.status + '. Live ABC refresh is not fully configured yet.'; }
+  renderChart('clubChart','bar',aggregate(rows,'clubName').slice(0,12));
+  renderChart('itemChart','bar',aggregate(rows,'itemName').slice(0,10));
+  txRows.innerHTML = rows.slice().sort((a,b)=>String(b.transactionTimestamp).localeCompare(String(a.transactionTimestamp))).slice(0,200).map(r=>`<tr><td>${r.transactionTimestamp||''}</td><td>${r.clubName||r.clubNumber||''}</td><td>${r.profitCenter||''}</td><td>${r.itemName||''}</td><td>${num(r.quantity)}</td><td>${money(r.subtotal)}</td></tr>`).join('');
+}
+function renderChart(id,type,pairs){
+  if(charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), { type, data:{ labels:pairs.map(p=>p[0]), datasets:[{ label:'Sales', data:pairs.map(p=>p[1]), backgroundColor:'#f47721', borderColor:'#031b34' }]}, options:{ responsive:true, plugins:{legend:{display:false}}, scales:{ y:{ticks:{callback:v=>money(v)}} } } });
+}
+loadData().catch(err => { warning.style.display='block'; warning.textContent='Could not load dashboard data: '+err.message; });
+</script>
+</body>
+</html>
